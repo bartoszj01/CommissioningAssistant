@@ -20,6 +20,12 @@
  * Added In Installer ID, In Installer Company to be saved from the CommAssist to Asset object
  * Added linking asset with the installer contact and company if they exist (based on installer Id)
  * Added Case creation if no match found between installer certification Id provided in CommAssist and technicians existing in Salesforce
+ *
+ * 06/11/2018 - by Bartosz
+ * Added IN_IN_SoldBy and IN_IN_SoldByInstaller parameters to the wrapper class and appropriate parameters to be filled in on Asset recordd
+ * Added CommAssistPayLoad__c text area to store the JSON body sent by the CA App
+ * Added method createCase(...) - which is shared by diffent scenarios when a case should be created
+ * Added case creation when no ServicePartner could be identified
  */
 @RestResource(urlMapping = '/AssetApi')
 global with sharing class AssetEndpointV2 {
@@ -96,12 +102,17 @@ global with sharing class AssetEndpointV2 {
         a.CommissioningDateTime__c = DateTime.valueOfGmt(owAsset.IN_UTC);
         a.INClientLanguage__c = setLanguage(owAsset.IN_Country);
         a.INClientDataConfirmed__c = false;
+        a.CommAssistPayLoad__c = jsonBody;
+        a.INSoldby__c = owAsset.IN_IN_SoldBy;
+        a.INSoldByInstaller__c = owAsset.IN_IN_SoldByInstaller;
         if (a.InstallationCommissioning__c == null) {
             a.InstallationCommissioning__c = Date.newInstance(year, month, day);
         }
         if (contacts.size() > 0) {
             a.Installer__c = contacts[0].Id;
-            a.ServicePartner__c = contacts[0].AccountId;
+            if (owAsset.IN_IN_SoldByInstaller != 'No') {
+                a.ServicePartner__c = contacts[0].AccountId;
+            }
         }
 
         List<Asset> assetList = new List<Asset>();
@@ -113,17 +124,42 @@ global with sharing class AssetEndpointV2 {
 
         upsert a;
 
-        if (a.Installer__c == null) {
+        if (a.Installer__c == null || a.ServicePartner__c == null) {
+
+            List<Case> cases = new List<Case>();
+            Id recordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByDeveloperName().get('TechnicalSupportCase').getRecordTypeId();
+
+            if (a.Installer__c == null ) {
+                String description = 'No match was found between installer certification Id provided in CommAssist and any existing Technician in Salesforce';
+                Case c = createCase('Technician Certification prüfen', recordTypeId, a.Id, description);
+                cases.add(c);
+            } else if (a.ServicePartner__c == null) {
+                String description = 'Service Partner for the asset could not be identified. Please add this information manually to the field Service Partner on the asset record.';
+                Case d = createCase('No Service Partner identified', recordTypeId, a.Id, description);
+                cases.add(d);
+            }
+            insert cases;
             // create case to inform support that no technician was found
-            Case c = new Case(
-                        Subject = 'Technician Certification prüfen',
-                        RecordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByDeveloperName().get('TechnicalSupportCase').getRecordTypeId(),
-                        Impact__c = '2. High',
-                        AssetId = a.Id,
-                        Description = 'No match was found between installer certification Id provided in CommAssist and existing Technician in Salesforce'
-            );
-            insert c;
+//            Case c = new Case(
+//                        Subject = 'Technician Certification prüfen',
+//                        RecordTypeId = Schema.SObjectType.Case.getRecordTypeInfosByDeveloperName().get('TechnicalSupportCase').getRecordTypeId(),
+//                        Impact__c = '2. High',
+//                        AssetId = a.Id,
+//                        Description = 'No match was found between installer certification Id provided in CommAssist and existing Technician in Salesforce'
+//            );
         }
+    }
+
+    private static Case createCase(String subject, Id recordTypeId, Id assetId, String description) {
+
+        Case c = new Case(
+            Subject = subject,
+            RecordTypeId = recordTypeId,
+            Impact__c = '2. High',
+            AssetId = assetId,
+            Description = description
+        );
+        return c;
     }
 
     private static String setLanguage(String country) {
@@ -185,5 +221,7 @@ global with sharing class AssetEndpointV2 {
         public String IN_TimeZone;
         public String IN_ZipCode;
         public String IN_UTC;
+        public String IN_IN_SoldByInstaller;
+        public String IN_IN_SoldBy;
     }
 }
