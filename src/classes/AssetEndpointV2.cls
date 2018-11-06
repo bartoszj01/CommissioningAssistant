@@ -26,6 +26,7 @@
  * Added CommAssistPayLoad__c text area to store the JSON body sent by the CA App
  * Added method createCase(...) - which is shared by diffent scenarios when a case should be created
  * Added case creation when no ServicePartner could be identified
+ *
  */
 @RestResource(urlMapping = '/AssetApi')
 global with sharing class AssetEndpointV2 {
