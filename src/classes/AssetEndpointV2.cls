@@ -135,8 +135,8 @@ global with sharing class AssetEndpointV2 {
                 Case c = createCase('Technician Certification prüfen', recordTypeId, a.Id, description);
                 cases.add(c);
             } else if (a.ServicePartner__c == null) {
-                String description = 'Service Partner for the asset could not be identified. Please add this information manually to the field Service Partner on the asset record.';
-                Case d = createCase('No Service Partner identified', recordTypeId, a.Id, description);
+                String description = 'Service Partner: ' + owAsset.IN_IN_SoldBy + ' could not be automatically linked. Please link the right Service Partner Company or if Service Partner does not exist yet please contact Regina Ruf (r.ruf@sonnen.de).';
+                Case d = createCase('No Service Partner', recordTypeId, a.Id, description);
                 cases.add(d);
             }
             insert cases;
